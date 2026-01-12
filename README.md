@@ -4,19 +4,14 @@ Typosquatting and phishing detection service - performs domain similarity analys
 
 ## Features
 
-- ✅ Typosquatting variation generation and search
-- ✅ Levenshtein distance similarity
-- ✅ Jaro-Winkler similarity
-- ✅ Homograph (Unicode) detection
-- ✅ Customizable algorithms with separate thresholds
-- ✅ Date range and TLD-based filtering
+- Typosquatting variation generation and search
+- Levenshtein distance similarity
+- Jaro-Winkler similarity
+- Homograph (Unicode) detection
+- Customizable algorithms with separate thresholds
+- Date range and TLD-based filtering
 
 ## Installation
-
-### Requirements
-
-- Python 3.11+
-- MongoDB 5.0+ (shared with zone-collector)
 
 ### Install Dependencies
 
