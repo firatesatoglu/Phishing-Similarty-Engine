@@ -1,22 +1,23 @@
-# Similarity Engine Service
+# Phishing Similarity Engine
 
-Typosquatting and phishing detection service - performs domain similarity analysis.
+Domain similarity and typosquatting detection service for phishing analysis.
+
+![API Documentation](docs/similarity-engine-api-docs.png)
 
 ## Features
 
-- Typosquatting variation generation and search
-- Levenshtein distance similarity
-- Jaro-Winkler similarity
-- Homograph (Unicode) detection
-- Customizable algorithms with separate thresholds
-- Date range and TLD-based filtering
+- **Typosquatting search** - Generate and match domain variations
+- **Similarity search** - Levenshtein, Jaro-Winkler algorithms
+- **Keyword search** - Find domains containing specific keywords
+- **Homograph detection** - Unicode/IDN attack detection
+- **Optimized queries** - Length-based pre-filtering for performance
 
 ## Installation
 
 ### Requirements
 
 - Python 3.11+
-- MongoDB 5.0+ (shared with zone-collector)
+- MongoDB 5.0+ (shared database with zone-collector)
 
 ### Install Dependencies
 
@@ -29,9 +30,8 @@ pip install -r requirements.txt
 Create a `.env` file:
 
 ```bash
-# MongoDB (same database as zone-collector)
 MONGODB_URL=mongodb://user:pass@localhost:27017/
-MONGODB_DB=icann_tlds_db
+DATABASE_NAME=icann_tlds_db
 ```
 
 ## Running
@@ -55,136 +55,123 @@ docker run -p 8003:8000 --env-file .env similarity-engine
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/` | GET | Swagger UI |
-| `/api/v1/health` | GET | Health check |
-| `/api/v1/algorithms` | GET | Supported algorithm list |
+| `/health` | GET | Health check |
+| `/algorithms` | GET | Available algorithms |
 
-### Typosquatting Search
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/v1/search/typosquatting` | POST | Search typosquatting variations |
-| `/api/v1/preview-variations` | POST | Variation preview |
-
-### Similarity Search
+### Search
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/v1/search/similarity` | POST | String similarity search |
+| `/search/typosquatting` | POST | Typosquatting variations |
+| `/search/similarity` | POST | String similarity search |
+| `/search/keyword` | POST | Keyword inclusion search |
 
 ---
 
-## Typosquatting API
+## POST `/search/typosquatting`
 
-### POST `/api/v1/search/typosquatting`
+Search for typosquatting variations of a brand.
 
-Searches for possible typosquatting variations of a domain in the database.
-
-#### Request Body
+### Request
 
 ```json
 {
-  "domain": "google.com",           // Required: domain.tld format
-  "days_back": 7,                   // Optional: days to look back (default: 7)
-  "algorithms": ["homoglyph", "omission"]  // Optional: algorithm filter
+  "brand_name": "google.com",
+  "days_back": 7,
+  "algorithms": ["omission", "homoglyph"],
+  "tlds": ["com", "net"]
 }
 ```
 
-> ⚠️ The `domain` parameter **must** be in `domain.tld` format (e.g., `google.com`). Just `google` is not accepted.
-
-#### Response
+### Response
 
 ```json
 {
-  "brand": "google",
-  "domain": "google.com",
-  "search_params": {
-    "days_back": 7,
-    "algorithms": ["homoglyph", "omission"],
-    "tlds_searched": ["com", "net", "org"]
-  },
-  "matches": [
+  "brand": "google.com",
+  "brand_extracted": "google",
+  "total_variations": 150,
+  "matched_variations": 5,
+  "variations": [
     {
-      "domain": "g00gle.com",
-      "tld": "com",
-      "first_seen": "2024-12-20T10:30:00Z",
-      "algorithm": "homoglyph",
-      "variation_type": "homoglyph"
+      "variation": "gogle",
+      "matched": true,
+      "matches": [{ "fqdn": "gogle.com", "first_seen": "..." }]
     }
-  ],
-  "total_matches": 15,
-  "execution_time_ms": 245
+  ]
 }
 ```
 
 ---
 
-## Similarity API
+## POST `/search/similarity`
 
-### POST `/api/v1/search/similarity`
+Search for similar domains using string similarity algorithms.
 
-Searches for similar domains using string similarity algorithms.
-
-#### Request Body
+### Request
 
 ```json
 {
-  "brand_name": "google.com",       // Required: brand or domain
-  "days_back": 7,                   // Optional: days to look back (default: 7)
-  "levenshtein_threshold": 0.70,    // Optional: Levenshtein threshold (default: 0.70)
-  "jaro_winkler_threshold": 0.75,   // Optional: Jaro-Winkler threshold (default: 0.75)
-  "homograph_enabled": true,        // Optional: Homograph check (default: true)
-  "tlds": ["com", "net"]            // Optional: TLD filter
+  "brand_name": "google.com",
+  "days_back": 7,
+  "levenshtein_threshold": 0.70,
+  "jaro_winkler_threshold": 0.75,
+  "homograph_enabled": true,
+  "tlds": ["com", "net"]
 }
 ```
 
-> 💡 `brand_name` accepts both `google` and `google.com` formats.
-
-#### Response
+### Response
 
 ```json
 {
-  "brand": "google",
-  "search_params": {
-    "days_back": 7,
-    "levenshtein_threshold": 0.70,
-    "jaro_winkler_threshold": 0.75,
-    "homograph_enabled": true,
-    "tlds": ["com", "net"]
-  },
+  "brand_extracted": "google",
+  "domains_scanned": 1500,
   "results": {
-    "levenshtein": [
-      {
-        "domain": "gogle.com",
-        "tld": "com",
-        "score": 0.857,
-        "first_seen": "2024-12-20T10:30:00Z"
-      }
-    ],
-    "jaro_winkler": [
-      {
-        "domain": "googel.com",
-        "tld": "com",
-        "score": 0.944,
-        "first_seen": "2024-12-21T08:15:00Z"
-      }
-    ],
-    "homograph": [
-      {
-        "domain": "gооgle.com",
-        "tld": "com",
-        "homograph_chars": ["о→o", "о→o"],
-        "first_seen": "2024-12-22T14:00:00Z"
-      }
-    ]
-  },
-  "summary": {
-    "levenshtein_count": 5,
-    "jaro_winkler_count": 8,
-    "homograph_count": 2,
-    "total": 15
-  },
-  "execution_time_ms": 1250
+    "levenshtein": [{ "domain": "gogle", "similarity": 0.83 }],
+    "jaro_winkler": [{ "domain": "googel", "similarity": 0.94 }],
+    "homograph": [{ "domain": "gооgle", "risk_level": "critical" }]
+  }
+}
+```
+
+### Performance Optimization
+
+Similarity search uses **length-based pre-filtering**:
+
+```
+brand: "google" (6 chars)
+length_tolerance: 3
+→ Only scans domains with 3-9 characters
+→ Reduces computation by 90%+
+```
+
+---
+
+## POST `/search/keyword`
+
+Find domains CONTAINING a specific keyword.
+
+### Request
+
+```json
+{
+  "keyword": "google",
+  "days_back": 7,
+  "tlds": ["com", "net"],
+  "limit": 500
+}
+```
+
+### Response
+
+```json
+{
+  "keyword": "google",
+  "total_matches": 25,
+  "matches": [
+    { "domain": "mygoogle", "fqdn": "mygoogle.com" },
+    { "domain": "google-login", "fqdn": "google-login.net" }
+  ]
 }
 ```
 
@@ -192,65 +179,44 @@ Searches for similar domains using string similarity algorithms.
 
 ## Typosquatting Algorithms
 
-Uses the [ail-typo-squatting](https://github.com/typosquatter/ail-typo-squatting) library:
-
-| Algorithm | Description | Example |
-|-----------|-------------|---------|
-| `omission` | Leave out a letter | google → gogle |
-| `repetition` | Repeat a character | google → gooogle |
-| `replacement` | Replace a character (QWERTY) | google → goagle |
-| `homoglyph` | Similar-looking characters | google → g00gle |
-| `addition` | Add a character | google → googlee |
-| `vowel_swap` | Swap vowels | google → guugle |
-| `subdomain` | Create subdomains | goo.gle → g.oogle |
-| `numeral_swap` | Number-letter swap | one → 1 |
-| `bitsquatting` | Bit-flip variations | google → coogle |
-| `wrong_tld` | Wrong TLD | google.com → google.co |
+| Algorithm | Example |
+|-----------|---------|
+| `omission` | google → gogle |
+| `repetition` | google → gooogle |
+| `replacement` | google → goagle |
+| `homoglyph` | google → g00gle |
+| `addition` | google → googlee |
+| `vowel_swap` | google → guugle |
+| `numeral_swap` | one → 1 |
 
 ---
 
 ## Similarity Algorithms
 
-### Levenshtein Distance
+### Levenshtein
 
-Edit distance-based similarity measurement. Calculates the minimum number of edits between two strings.
+Edit distance similarity. Default threshold: `0.70`
 
 ```
-Formula: 1 - (edit_distance / max(len(s1), len(s2)))
-
-Example:
-  "google" vs "gogle" → 1 deletion → score: 0.833
-  "google" vs "googel" → 1 transposition → score: 0.833
+"google" vs "gogle" → 0.83 (1 deletion)
 ```
-
-**Default Threshold:** `0.70`
 
 ### Jaro-Winkler
 
-Prefix-weighted similarity. Gives higher scores when string beginnings match.
+Prefix-weighted similarity. Default threshold: `0.75`
 
 ```
-Example:
-  "google" vs "gooogle" → score: 0.952 (strong prefix match)
-  "google" vs "elgoog" → score: 0.611 (weak match)
+"google" vs "googel" → 0.94 (strong prefix)
 ```
 
-**Default Threshold:** `0.75`
+### Homograph
 
-### Homograph Detection
-
-Detects Unicode look-alike characters:
+Unicode look-alike detection:
 
 ```
-Example:
-  "google" vs "gооgle" (Cyrillic 'о') → Homograph detected
-  "apple" vs "аpple" (Cyrillic 'а') → Homograph detected
+"google" vs "gооgle" (Cyrillic о) → Detected
+Risk levels: critical, high, medium, low
 ```
-
-**Detected Characters:**
-- Cyrillic: а, е, о, р, с, х, у (looks like a, e, o, p, c, x, y)
-- Greek: α, β, ε, ι, κ, ο, ρ, τ, υ
-- Special: І, ı, ℓ, ﬁ, ﬂ
 
 ---
 
@@ -259,36 +225,20 @@ Example:
 ```
 similarity-engine/
 ├── app/
-│   ├── main.py              # FastAPI app
-│   ├── config.py            # Settings (Pydantic)
-│   ├── api/
-│   │   └── routes.py        # API endpoints, request/response models
-│   ├── database/
-│   │   └── mongodb.py       # MongoDB queries
+│   ├── main.py
+│   ├── config.py
+│   ├── api/routes.py           # Endpoints + request models
+│   ├── database/mongodb.py     # Optimized queries
 │   └── services/
-│       ├── typosquatting.py # Variation generation
-│       └── string_similarity.py  # Similarity algorithms
-├── requirements.txt
-├── Dockerfile
-└── .env
+│       ├── typosquatting.py    # Variation generator
+│       └── string_similarity.py # Similarity algorithms
+└── requirements.txt
 ```
 
 ## Performance
 
-| Operation | Average Time |
-|-----------|--------------|
-| Typosquatting (single TLD) | ~50ms |
-| Typosquatting (all TLDs) | ~500ms |
-| Similarity (7 days, 3 TLDs) | ~1-2s |
-| Similarity (30 days, all TLDs) | ~10-30s |
-
-> 💡 Similarity search scans all domains, so using `days_back` and `tlds` filters improves performance.
-
-## Error Codes
-
-| HTTP | Description |
-|------|-------------|
-| 400 | Invalid domain format |
-| 404 | TLD not found |
-| 500 | Internal server error |
-| 503 | MongoDB connection error |
+| Operation | Time |
+|-----------|------|
+| Typosquatting | ~100ms |
+| Similarity (with filter) | ~500ms |
+| Keyword search | ~50ms |
